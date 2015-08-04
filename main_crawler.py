@@ -7,33 +7,33 @@ import json
 from sys import argv
 import sys
 import time
-from login import ID_login
 from parser import MyParser
-from proxy_IPs import Proxy_IPs
+import subprocess
 
 class Crawler():
 
-	def __init__(self, id_list_file='config/usr', cookieDir='cookies', num_id_th=0, usr_file='config/login_usr', keywords=[], data_dir='data', died_usr_file='config/died_usr', tmp_data_dir='tmp_data', date=''):
-		self.id_list_file =id_list_file
+	def __init__(self, usr_list_file='config/usr', cookieDir='cookies', num_usr_th=0, usr_file='config/login_usr', keywords=[], data_dir='data', died_usr_file='config/died_usr', tmp_data_dir='tmp_data', date='', status={}, gap=1):
+		self.usr_list_file =usr_list_file
 		self.cookieDir = cookieDir
-		self.num_id_th = num_id_th
+		self.num_usr_th = num_usr_th
 		self.usr_file = usr_file
 		self.login_usrs = []
 		inf = open(self.usr_file, 'r')
 		for line in inf:
 			self.login_usrs.append(line[:-1])
-		self.num_ids = len(self.login_usrs)
+		self.num_usrs = len(self.login_usrs)
 		self.keywords = keywords
-		self.alive = self.num_ids
+		self.alive = self.num_usrs
 		self.tmp_data_dir =tmp_data_dir
 		self.died_usr_file = died_usr_file
 		self.data_dir = data_dir
 		self.date = date
-
+		self.recover_from = status
 		self.ktot = {}
 		for keyword in keywords:
 			self.ktot[keyword] = 0
 		self.tot = 0
+		self.gap = int(gap)
 		self.headers = [
 			('User-Agent','Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/29.0.1547.65 Safari/537.36'),
 			('Accept','text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'),
@@ -75,11 +75,16 @@ class Crawler():
 		page = 1
 		loc = 0
 		myparser = MyParser()
-		#update = '2000-00-00 00:00'
-		
+
+		if self.recover_from != {}:
+			for i in range(len(self.keywords)):
+				if self.keywords[i] == self.recover_from['keyword']:
+					break
+			self.keywords = self.keywords[i:]
+			subprocess.call(['rm', self.data_dir+'/'+self.recover_from['keyword']+'/*'])
 		for keyword in self.keywords:
 			for loc in range(35):
-				for st in range(24):
+				for st in range(0, 24, self.gap):
 					end = False
 					for page in range(1, 50):
 						if end:
@@ -87,7 +92,7 @@ class Crawler():
 						while True:
 							while True:
 								ii += 1
-								if ii == self.num_ids:
+								if ii == self.num_usrs:
 									ii = 0
 								usr = self.login_usrs[ii]
 								if usr != None:
@@ -101,11 +106,11 @@ class Crawler():
 							#opener.add_handler(urllib.request.ProxyHandler(proxies={"http":ip}))
 							opener.addheaders = self.headers
 							
-							url = 'http://s.weibo.com/wb/'+urllib.parse.urlencode({'a':keyword})[2:]+'&xsort=time&timescope=custom:'+self.date+'-'+str(st)+':'+self.date+'-'+str(st)+'&region=custom:'+self.ginfo[loc]['id']+'&Refer=g&page='+str(page)
+							url = 'http://s.weibo.com/weibo/'+urllib.parse.urlencode({'a':keyword})[2:]+'&typeall=1&suball=1&xsort=time&timescope=custom:'+self.date+'-'+str(st)+':'+self.date+'-'+str(st+self.gap-1)+'&region=custom:'+self.ginfo[loc]['id']+'&page='+str(page)
 							
 
 							print(url)
-							print('Crawling:', keyword, self.ginfo[loc]['loc'], 'time:', str(st)+'-'+str(st+1), 'page:', page, 'lk_tot:', self.ginfo[loc]['tot'][keyword], 'k_tot:', self.ktot[keyword], 'tot:', self.tot)
+							print('Crawling:', keyword, self.ginfo[loc]['loc'], 'time:', str(st)+'-'+str(st+self.gap-1), 'page:', page, 'lk_tot:', self.ginfo[loc]['tot'][keyword], 'k_tot:', self.ktot[keyword], 'tot:', self.tot)
 							
 							try:
 								time1 = time.time()
@@ -126,10 +131,12 @@ class Crawler():
 									oufd.close
 									self.login_usrs[ii] = None
 									self.update()
-									if self.alive < self.num_id_th:
-										exit()
+									if self.alive < self.num_usr_th:
+										return {'keyword':keyword}
 								else:
-									pos = content.find('"pid":"pl_wb_feedlist"')
+									#print (content)
+
+									pos = content.find('"pid":"pl_weibo_direct"')
 									content = content[pos-1:]
 									pos = content.find('</script>')
 									content = content[:pos-1]
@@ -138,6 +145,7 @@ class Crawler():
 										js = json.loads(content)
 									except:
 										print('Json Load Error')
+
 										continue
 									
 									html = ('<html>'+js["html"]+'</html>')
@@ -158,6 +166,7 @@ class Crawler():
 										if len(results) > 0:
 											ouf = open(self.data_dir+'/'+keyword+'/'+self.ginfo[loc]['loc'], 'a')
 											for result in results:
+												result['keyword'] = keyword
 												ouf.write(json.dumps(result, ensure_ascii = False))
 												ouf.write('\n')
 												self.ginfo[loc]['tot'][keyword] += 1
@@ -177,9 +186,9 @@ class Crawler():
 								etime += 1
 								print ('Some Error Happend, Error times:', etime)
 								print('------------------------------------------------------------')
-								
-								"""
 								if etime == 300:
-									exit()
-								"""
+									ouf = open(self.usr_file, 'w')
+									ouf.close()
+									return {'keyword':keyword}
 		self.update()
+		return {}

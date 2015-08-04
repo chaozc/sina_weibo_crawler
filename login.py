@@ -8,9 +8,9 @@ import json
 #sometime this header is useful, because of Authorization field
 
 #login to sina
-class ID_login:
+class Usr_login:
 
-	def __init__(self,user="", password="", cookieDir='.', proxy_IP=''):
+	def __init__(self, user="", password="", cookieDir='.', proxy_IP=''):
 		http_header = [
 			('User-Agent','Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/29.0.1547.65 Safari/537.36'),
 			('Accept','text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'),
@@ -27,17 +27,11 @@ class ID_login:
 		self.cj = LWPCookieJar(self.cookieFile)
 		self.cj.load(ignore_discard=True, ignore_expires=True)
 		self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cj))
-		if proxy_IP == '':
-			self.opener.add_handler(urllib.request.ProxyHandler(proxies={"http":proxy_IP}))
+		self.opener.add_handler(urllib.request.ProxyHandler(proxies={"http":proxy_IP}))
 		self.opener.addheaders = http_header
-		#get user information for params or db
-		if user == "" or password == "":
-			self.user,self.password = infodb.getUser()
-		else:
-			#infodb.updateUser(user,password)
-			self.user,self.password = user,password
+		#get user information from params
+		self.user,self.password = user,password
 
-		#self.client_id,self.client_secret = infodb.getAPI()
 		#encode userid
 		userid = bytes(urllib.parse.quote(self.user),'utf-8')
 		self.encode_userid = base64.encodestring(userid)[:-1]
@@ -50,7 +44,7 @@ class ID_login:
 		#fetch pubkey rsakv servertime nonce
 		url = "https://login.sina.com.cn/sso/prelogin.php?entry=sso&callback=sinaSSOController.preloginCallBack&su=&rsakt=mod&client=ssologin.js(v1.4.11)"
 		time.sleep(0.5)
-		print('Step1 Finished')
+		print('Pubkey, rsakv, servertime and nonce obtained')
 		res = self.opener.open(url).read().decode('utf-8')
 		res = res[res.find("(")+1:-1]
 		data = json.loads(res)
@@ -77,17 +71,12 @@ class ID_login:
 				"callback":"sinaSSOController.loginCallBack","cdult":2,"prelt":83,\
 				"returntype":"TEXT"}
 		rurl = baseurl + "?" + urllib.parse.urlencode(params)
-		#print (rurl)
+
 		time.sleep(0.5)
 		res = self.opener.open(rurl).read()
 		res = res.decode('utf-8')
-		print('Step2 Finished')		
-		"""
-		try:
-			res = self.opener.open(rurl, timeout=10).read().decode('utf-8')
-		except:
-			return False, 'Connection Timeout'
-		"""
+		print('Login responsed obtained')		
+
 		self.cj.save(ignore_discard=True, ignore_expires=True)
 		pos1 = res.find('(')
 		pos2 = res.find(')')
@@ -108,8 +97,3 @@ class ID_login:
 			reason = js["reason"]
 			self.opener.close()
 			return False, str(js)
-
-"""
-t = login("jiao45825371331@163.com", "wwee14")
-print (t.ssologin())
-"""
